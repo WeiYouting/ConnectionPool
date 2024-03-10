@@ -147,7 +147,7 @@ bool ConnectionPool::loadConfig() {
 
 		int endidx = str.find('\n', idx);
 		std::string key = str.substr(0, idx);
-		std::string value = str.substr(idx + 1, endidx - 1);
+		std::string value = str.substr(idx + 1, endidx - idx - 1);
 
 		if (key == "ip") {
 			this->_ip = value;
