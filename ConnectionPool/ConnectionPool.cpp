@@ -7,6 +7,35 @@ ConnectionPool* ConnectionPool::getConnectionPool() {
 	return &pool;
 }
 
+std::shared_ptr<Connection> ConnectionPool::getConnection(){
+	std::unique_lock<std::mutex> lock(this->_queueMutex);
+	while (this->_connectionQueue.empty()) {
+		if (this->_connectionQueue.empty()) {
+			// 等待空闲连接
+			if (std::cv_status::timeout == cv.wait_for(lock, std::chrono::milliseconds(this->_connectionTimeout))) {
+				if (this->_connectionQueue.empty()) {
+					LOG("获取连接超时");
+					return nullptr;
+				}
+			}
+		}
+	}
+
+	// 自定义删除器，不需要释放连接，只需要将连接入队
+	std::shared_ptr<Connection> sp(this->_connectionQueue.front(), 
+		[&](Connection *pcon) {
+			std::unique_lock<std::mutex> lock(this->_queueMutex);
+			//归还线程
+			this->_connectionQueue.push(pcon);
+		});
+
+	this->_connectionQueue.pop();
+	// 通知生产者线程检查队列状态
+	cv.notify_all();
+	
+	return sp;
+}
+
 /*
 	线程池使用单例模式，构造函数只执行一次
 */
@@ -60,6 +89,8 @@ void ConnectionPool::produceConnectionTask() {
 	}
 
 }
+
+
 
 bool ConnectionPool::loadConfig() {
 	FILE* pf = fopen("mysql.ini", "r");
