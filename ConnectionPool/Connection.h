@@ -2,6 +2,7 @@
 
 #include "mysql.h"
 #include <string>
+#include <ctime>
 
 /*
 	实现Mysql数据库操作
@@ -23,6 +24,18 @@ public:
 	// 查询操作 select
 	MYSQL_RES* query(std::string sql);
 
+	// 刷新连接存活时间
+	void refreshAliveTime() {
+		this->_alivetime = clock();
+	}
+
+	// 获得空闲时间
+	clock_t getAliveTime() const{
+		return clock() - this->_alivetime;
+	}
+
 private:
 	MYSQL* _conn;
+	// 记录进入空闲状态后的存活时间
+	clock_t _alivetime;
 };

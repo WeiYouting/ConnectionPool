@@ -29,8 +29,11 @@ private:
 	// 从配置文件中加载配置
     bool loadConfig(); 
 
-	// 运行在独立的线程中，负责生成新连接
+	// 运行独立的线程 负责生成新连接
 	void produceConnectionTask();
+
+	// 运行独立的线程 负责扫描空闲连接
+	void scannerConnectionTask();
 
 	// ip地址
 	std::string _ip;

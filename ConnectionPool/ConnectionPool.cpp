@@ -27,6 +27,9 @@ std::shared_ptr<Connection> ConnectionPool::getConnection(){
 			std::unique_lock<std::mutex> lock(this->_queueMutex);
 			//归还线程
 			this->_connectionQueue.push(pcon);
+			++this->_connectionCnt;
+			// 刷新空闲时间
+			pcon->refreshAliveTime();
 		});
 
 	this->_connectionQueue.pop();
@@ -51,7 +54,9 @@ ConnectionPool::ConnectionPool() {
 		Connection* con = new Connection();
 		con->connect(this->_ip, this->_port, this->_username,
 			this->_password,this->_dbname); 
-		
+		// 刷新空闲时间
+		con->refreshAliveTime();
+
 		// 添加至连接池队列，创建连接数自增
 		this->_connectionQueue.push(con);
 		++this->_connectionCnt;
@@ -61,7 +66,34 @@ ConnectionPool::ConnectionPool() {
 
 	// 启动新线程作为连接的生产者
 	std::thread produce(std::bind(&ConnectionPool::produceConnectionTask,this));
+	produce.detach();
 
+
+	// 启动新的定时线程，扫描超过最大空闲时间的连接，进行回收；
+	std::thread scanner(std::bind(&ConnectionPool::scannerConnectionTask, this));
+	scanner.detach();
+}
+
+void ConnectionPool::scannerConnectionTask(){
+
+	while (TRUE) {
+		std::this_thread::sleep_for(std::chrono::seconds(this->_maxIdleTime));
+
+		// 扫描整个队列，释放多余连接
+		std::unique_lock<std::mutex> lock(this->_queueMutex);
+		while (this->_connectionCnt > this->_initSize) {
+			Connection* p = this->_connectionQueue.front();
+			if (p->getAliveTime() >= (this->_maxIdleTime * 1000)) {
+				// 出队，调用析构函数释放连接
+				this->_connectionQueue.pop();
+				--this->_connectionCnt;
+				delete p;
+			}
+			else {
+				break;
+			}
+		}
+	}
 
 }
 
@@ -79,7 +111,8 @@ void ConnectionPool::produceConnectionTask() {
 			Connection* con = new Connection();
 			con->connect(this->_ip, this->_port, this->_username,
 				this->_password, this->_dbname);
-
+			// 刷新空闲时间
+			con->refreshAliveTime();
 			// 添加至连接池队列，创建连接数自增
 			this->_connectionQueue.push(con);
 			++this->_connectionCnt;
@@ -89,6 +122,8 @@ void ConnectionPool::produceConnectionTask() {
 	}
 
 }
+
+
 
 
 
